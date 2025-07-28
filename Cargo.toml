@@ -1,0 +1,5 @@
+[workspace]
+members = ["environment", "course","xtask"]
+exclude = ["exercises"]
+resolver = "3"
+package.edition = "2024"
