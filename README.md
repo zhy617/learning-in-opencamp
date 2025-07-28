@@ -28,7 +28,7 @@ OpenCamp 训练营通用学习工具
 
 1. **Rust 环境**（必需）
 ```bash
-# Ubuntu/Debian
+# Ubuntu24.04/Debian
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 source ~/.cargo/env
