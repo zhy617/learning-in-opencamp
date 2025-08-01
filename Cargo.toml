@@ -1,5 +1,5 @@
 [workspace]
-members = ["environment", "course","xtask"]
+members = ["xtask","environment"]
 exclude = ["exercises"]
 resolver = "3"
 package.edition = "2024"

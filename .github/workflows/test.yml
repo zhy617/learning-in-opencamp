@@ -1,0 +1,156 @@
+name: CI Test
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths-ignore:
+      - 'README.md'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  TZ: Asia/Shanghai # 设置时区
+  ENCODED_API_URL: "aHR0cHM6Ly9hcGkub3BlbmNhbXAuY24vd2ViL2FwaS9jb3Vyc2VSYW5rL2NyZWF0ZUJ5VGhpcmRUb2tlbg=="
+  TROKEN: "OTdEamJRRFloc3NoNUFOeTNqaDV3N005WWVmV20wWWM="
+
+jobs:
+  initialize:
+    name: Initialize and Check for Projects
+    runs-on: ubuntu-latest
+    outputs:
+      run_exercises: ${{ steps.check.outputs.run_exercises }}
+      api_url: ${{ steps.decode_api_url.outputs.url }}
+      token: ${{ steps.decode_token.outputs.token }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive # 初始化和更新子模块
+    - name: Decode API URL
+      id: decode_api_url
+      run: |
+        echo "url=$(echo "$ENCODED_API_URL" | base64 --decode)"  >> "$GITHUB_OUTPUT"
+    - name: Decode Token
+      id: decode_token
+      run: |
+        echo "token=$(echo "$TROKEN" | base64 --decode)"  >> "$GITHUB_OUTPUT"
+    - name: Check for Exercise Projects
+      id: check
+      run: |
+        if [ -d "exercises" ]; then
+          echo "run_exercises=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run_exercises=false" >> "$GITHUB_OUTPUT"
+        fi
+
+  exercises_test:
+    name: Exercises Testing
+    needs: initialize
+    if: ${{ needs.initialize.outputs.run_exercises == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      details: ${{ steps.autograding.outputs.details }}
+      points: ${{ steps.autograding.outputs.points}}
+    env:
+      API_URL: ${{ needs.initialize.outputs.api_url }}
+      TOKEN: ${{ needs.initialize.outputs.token }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+    - name: Set up Rust environment
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    - name: Install xtask dependencies
+      run: |
+        cargo build --release
+    - name: Run exercises evaluation
+      run: |
+        cargo run --bin xtask -- eval --verbose | tee test_output.txt
+      continue-on-error: true
+    - name: Parse test results and generate JSON for Exercises
+      run: |
+        test_output="test_output.txt"
+        json_file=".github/result/exercises_result.json"
+        
+        # 初始化计数器
+        total_exercations=0
+        total_succeeds=0
+        total_failures=0
+        exercises_json="[]"
+        
+        # 解析输出
+        while IFS= read -r line; do
+          if [[ $line =~ ✓.*\.rs$ ]]; then
+            exercise_name=$(echo "$line" | sed 's/.*✓ //' | sed 's/\.rs$//')
+            exercises_json=$(echo "$exercises_json" | jq --arg name "$exercise_name" --argjson result true '. + [{name: $name, result: $result}]')
+            total_succeeds=$((total_succeeds + 1))
+            total_exercations=$((total_exercations + 1))
+          elif [[ $line =~ ✗.*\.rs$ ]]; then
+            exercise_name=$(echo "$line" | sed 's/.*✗ //' | sed 's/\.rs$//')
+            exercises_json=$(echo "$exercises_json" | jq --arg name "$exercise_name" --argjson result false '. + [{name: $name, result: $result}]')
+            total_failures=$((total_failures + 1))
+            total_exercations=$((total_exercations + 1))
+          fi
+        done < "$test_output"
+        
+        # 生成最终 JSON
+        final_json=$(jq -n \
+          --argjson exercises "$exercises_json" \
+          --arg user_name "null" \
+          --argjson total_exercations "$total_exercations" \
+          --argjson total_succeeds "$total_succeeds" \
+          --argjson total_failures "$total_failures" \
+          --argjson total_time 3 \
+          '{exercises: $exercises, user_name: $user_name, statistics: {total_exercations: $total_exercations, total_succeeds: $total_succeeds, total_failures: $total_failures, total_time: $total_time}}')
+        
+        # 保存到 JSON 文件
+        echo "$final_json" > "$json_file"
+        
+        # 打印新的 JSON 文件到终端
+        cat "$json_file"
+      continue-on-error: true
+    - uses: yfblock/os-autograding@master
+      id: autograding
+      with:
+        outputFile: .github/result/exercises_result.json
+    - name: Generate summary JSON for Exercises
+      run: |
+        outfile=".github/result/exercises_result.json"
+        summary_file=".github/result/exercises_summary.json"
+        
+        # 提取需要的值
+        total_exercations=$(jq '.statistics.total_exercations' $outfile)
+        total_succeeds=$(jq '.statistics.total_succeeds' $outfile)
+        exercises_user="${{ github.actor }}"
+        
+        # 生成新的 JSON 内容
+        new_json=$(jq -n \
+          --arg channel "github" \
+          --argjson courseId 1755 \
+          --arg ext "aaa" \
+          --arg name "$exercises_user" \
+          --argjson score "$total_succeeds" \
+          --argjson totalScore "$total_exercations" \
+          '{channel: $channel, courseId: $courseId, ext: $ext, name: $name, score: $score, totalScore: $totalScore}')
+        
+        # 保存新的 JSON 文件
+        echo "$new_json" > $summary_file
+        
+        # 打印新的 JSON 文件到终端
+        cat $summary_file
+    - name: Post summary JSON to remote API
+      run: |
+        summary_file=".github/result/exercises_summary.json"
+        
+        # 发送 POST 请求
+        curl -X POST "$API_URL" \
+          -H "accept: application/json;charset=utf-8" \
+          -H "Content-Type: application/json" \
+          -H "token: $TOKEN" \
+          -d "$(cat $summary_file)" \
+          -v
