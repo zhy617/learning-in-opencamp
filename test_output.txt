@@ -1,0 +1,65 @@
+开始评测练习...
+自动评测所有课程...
+
+评测课程: learning-lm-rs
+评测 learning-lm-rs 项目...
+运行测试: cargo test --release
+
+running 5 tests
+test operators::test_matmul_transb ... ok
+test operators::test_rms_norm ... ok
+test model::test_mlp ... ok
+test operators::test_silu ... ok
+test model::test_load_safetensors ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+warning: unused import: `View`
+ --> src/params.rs:5:32
+  |
+5 | use safetensors::{SafeTensors, View};
+  |                                ^^^^
+  |
+  = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `token_ids`
+   --> src/model.rs:163:9
+    |
+163 |         token_ids: &[u32],
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_token_ids`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: field `bos_token_id` is never read
+  --> src/model.rs:23:5
+   |
+11 | pub struct Llama<T> {
+   |            ----- field in this struct
+...
+23 |     bos_token_id: u32,      // start token id
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` on by default
+
+warning: function `sigmoid` is never used
+   --> src/operators.rs:104:8
+    |
+104 | pub fn sigmoid(x: f32) -> f32 {
+    |        ^^^^^^^
+
+warning: `learning-lm-rust` (bin "learning-lm-rust" test) generated 4 warnings
+    Finished `release` profile [optimized] target(s) in 0.05s
+     Running unittests src/main.rs (target/release/deps/learning_lm_rust-c7df16ea17c8345c)
+
+✓ model.rs
+✓ operators.rs
+评测完成!
+评测结果统计
+总练习数: 2
+通过数量: 2
+失败数量: 0
+总耗时: 0秒
+通过率: 100.00%
+
+评测结果已保存到 eval_result.json

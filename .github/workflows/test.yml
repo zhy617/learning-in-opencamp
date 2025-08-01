@@ -74,6 +74,9 @@ jobs:
       continue-on-error: true
     - name: Parse test results and generate JSON for Exercises
       run: |
+        # 创建结果目录
+        mkdir -p .github/result
+        
         test_output="test_output.txt"
         json_file=".github/result/exercises_result.json"
         
