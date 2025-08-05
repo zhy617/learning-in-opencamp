@@ -1,0 +1,79 @@
+{
+  "exercises": [
+    {
+      "name": "if1",
+      "result": true
+    },
+    {
+      "name": "if2",
+      "result": true
+    },
+    {
+      "name": "if3",
+      "result": true
+    },
+    {
+      "name": "quiz1",
+      "result": true
+    },
+    {
+      "name": "intro1",
+      "result": true
+    },
+    {
+      "name": "intro2",
+      "result": true
+    },
+    {
+      "name": "variables5",
+      "result": true
+    },
+    {
+      "name": "variables4",
+      "result": true
+    },
+    {
+      "name": "variables6",
+      "result": true
+    },
+    {
+      "name": "variables1",
+      "result": true
+    },
+    {
+      "name": "variables3",
+      "result": true
+    },
+    {
+      "name": "variables2",
+      "result": true
+    },
+    {
+      "name": "functions2",
+      "result": true
+    },
+    {
+      "name": "functions3",
+      "result": true
+    },
+    {
+      "name": "functions1",
+      "result": true
+    },
+    {
+      "name": "functions5",
+      "result": true
+    },
+    {
+      "name": "functions4",
+      "result": true
+    }
+  ],
+  "user_name": "null",
+  "statistics": {
+    "total_exercations": 17,
+    "total_succeeds": 17,
+    "total_failures": 0,
+    "total_time": 3
+  }
+}

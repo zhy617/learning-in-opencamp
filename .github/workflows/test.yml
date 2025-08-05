@@ -13,7 +13,8 @@ env:
   CARGO_TERM_COLOR: always
   TZ: Asia/Shanghai # 设置时区
   ENCODED_API_URL: "aHR0cHM6Ly9hcGkub3BlbmNhbXAuY24vd2ViL2FwaS9jb3Vyc2VSYW5rL2NyZWF0ZUJ5VGhpcmRUb2tlbg=="
-  TROKEN: "OTdEamJRRFloc3NoNUFOeTNqaDV3N005WWVmV20wWWM="
+  TROKEN: "MWExNjE2NmViNGIxNGNhMGFjZmY1NTY4MWNhMjY1ZDU="  # Rust课程token
+  CXX_TOKEN: "N2Y3MzFkYjYwOWNkNGZjM2JjMmFlMDA1Mzg2MjU0Y2U="  # C++课程token
 
 jobs:
   initialize:
@@ -21,8 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       run_exercises: ${{ steps.check.outputs.run_exercises }}
+      run_cxx: ${{ steps.check.outputs.run_cxx }}
       api_url: ${{ steps.decode_api_url.outputs.url }}
       token: ${{ steps.decode_token.outputs.token }}
+      cxx_token: ${{ steps.decode_cxx_token.outputs.token }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -35,6 +38,10 @@ jobs:
       id: decode_token
       run: |
         echo "token=$(echo "$TROKEN" | base64 --decode)"  >> "$GITHUB_OUTPUT"
+    - name: Decode C++ Token
+      id: decode_cxx_token
+      run: |
+        echo "token=$(echo "$CXX_TOKEN" | base64 --decode)"  >> "$GITHUB_OUTPUT"
     - name: Check for Exercise Projects
       id: check
       run: |
@@ -42,6 +49,11 @@ jobs:
           echo "run_exercises=true" >> "$GITHUB_OUTPUT"
         else
           echo "run_exercises=false" >> "$GITHUB_OUTPUT"
+        fi
+        if [ -d "exercises/learning-cxx" ]; then
+          echo "run_cxx=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "run_cxx=false" >> "$GITHUB_OUTPUT"
         fi
 
   exercises_test:
@@ -54,7 +66,7 @@ jobs:
       points: ${{ steps.autograding.outputs.points}}
     env:
       API_URL: ${{ needs.initialize.outputs.api_url }}
-      TOKEN: ${{ needs.initialize.outputs.token }}
+      TOKEN: ${{ needs.initialize.outputs.cxx_token }}
     steps:
     - uses: actions/checkout@v4
       with:
@@ -70,7 +82,7 @@ jobs:
         cargo build --release
     - name: Run exercises evaluation
       run: |
-        cargo run --bin xtask -- eval --verbose | tee test_output.txt
+        cargo xtask eval --course rustlings | tee test_output.txt
       continue-on-error: true
     - name: Parse test results and generate JSON for Exercises
       run: |
@@ -134,7 +146,7 @@ jobs:
         # 生成新的 JSON 内容
         new_json=$(jq -n \
           --arg channel "github" \
-          --argjson courseId 1755 \
+          --argjson courseId 1885 \
           --arg ext "aaa" \
           --arg name "$exercises_user" \
           --argjson score "$total_succeeds" \
@@ -149,6 +161,120 @@ jobs:
     - name: Post summary JSON to remote API
       run: |
         summary_file=".github/result/exercises_summary.json"
+        
+        # 发送 POST 请求
+        curl -X POST "$API_URL" \
+          -H "accept: application/json;charset=utf-8" \
+          -H "Content-Type: application/json" \
+          -H "token: $TOKEN" \
+          -d "$(cat $summary_file)" \
+          -v
+
+  cxx_test:
+    name: C++ Course Testing
+    needs: initialize
+    if: ${{ needs.initialize.outputs.run_cxx == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      details: ${{ steps.autograding.outputs.details }}
+      points: ${{ steps.autograding.outputs.points}}
+    env:
+      API_URL: ${{ needs.initialize.outputs.api_url }}
+      TOKEN: ${{ needs.initialize.outputs.token }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: 'true'
+    - name: Set up Rust environment
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+    - name: Install xtask dependencies
+      run: |
+        cargo build --release
+    - name: Run C++ course evaluation
+      run: |
+        cargo run --bin xtask -- eval --course learning-cxx --verbose | tee cxx_test_output.txt
+      continue-on-error: true
+    - name: Parse C++ test results and generate JSON
+      run: |
+        # 创建结果目录
+        mkdir -p .github/result
+        
+        test_output="cxx_test_output.txt"
+        json_file=".github/result/cxx_result.json"
+        
+        # 初始化计数器
+        total_exercations=0
+        total_succeeds=0
+        total_failures=0
+        exercises_json="[]"
+        
+        # 解析输出
+        while IFS= read -r line; do
+          if [[ $line =~ ✓.*exercise[0-9]+ ]]; then
+            exercise_name=$(echo "$line" | sed 's/.*✓ //')
+            exercises_json=$(echo "$exercises_json" | jq --arg name "$exercise_name" --argjson result true '. + [{name: $name, result: $result}]')
+            total_succeeds=$((total_succeeds + 1))
+            total_exercations=$((total_exercations + 1))
+          elif [[ $line =~ ✗.*exercise[0-9]+ ]]; then
+            exercise_name=$(echo "$line" | sed 's/.*✗ //')
+            exercises_json=$(echo "$exercises_json" | jq --arg name "$exercise_name" --argjson result false '. + [{name: $name, result: $result}]')
+            total_failures=$((total_failures + 1))
+            total_exercations=$((total_exercations + 1))
+          fi
+        done < "$test_output"
+        
+        # 生成最终 JSON
+        final_json=$(jq -n \
+          --argjson exercises "$exercises_json" \
+          --arg user_name "null" \
+          --argjson total_exercations "$total_exercations" \
+          --argjson total_succeeds "$total_succeeds" \
+          --argjson total_failures "$total_failures" \
+          --argjson total_time 3 \
+          '{exercises: $exercises, user_name: $user_name, statistics: {total_exercations: $total_exercations, total_succeeds: $total_succeeds, total_failures: $total_failures, total_time: $total_time}}')
+        
+        # 保存到 JSON 文件
+        echo "$final_json" > "$json_file"
+        
+        # 打印新的 JSON 文件到终端
+        cat "$json_file"
+      continue-on-error: true
+    - uses: yfblock/os-autograding@master
+      id: autograding
+      with:
+        outputFile: .github/result/cxx_result.json
+    - name: Generate summary JSON for C++
+      run: |
+        outfile=".github/result/cxx_result.json"
+        summary_file=".github/result/cxx_summary.json"
+        
+        # 提取需要的值
+        total_exercations=$(jq '.statistics.total_exercations' $outfile)
+        total_succeeds=$(jq '.statistics.total_succeeds' $outfile)
+        cxx_user="${{ github.actor }}"
+        
+        # 生成新的 JSON 内容 (使用课程ID 1886)
+        new_json=$(jq -n \
+          --arg channel "github" \
+          --argjson courseId 1886 \
+          --arg ext "aaa" \
+          --arg name "$cxx_user" \
+          --argjson score "$total_succeeds" \
+          --argjson totalScore "$total_exercations" \
+          '{channel: $channel, courseId: $courseId, ext: $ext, name: $name, score: $score, totalScore: $totalScore}')
+        
+        # 保存新的 JSON 文件
+        echo "$new_json" > $summary_file
+        
+        # 打印新的 JSON 文件到终端
+        cat $summary_file
+    - name: Post C++ summary JSON to remote API
+      run: |
+        summary_file=".github/result/cxx_summary.json"
         
         # 发送 POST 请求
         curl -X POST "$API_URL" \
